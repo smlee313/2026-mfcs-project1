@@ -1,0 +1,5 @@
+{"session": "265489c0f484", "time": "2026-11-05T11:58:10.210385+00:00", "direction": "Alice->Bob", "message": {"opcode": 0, "type": "RSA"}}
+{"session": "265489c0f484", "time": "2026-11-05T11:58:10.213586+00:00", "direction": "Bob->Alice", "message": {"opcode": 1, "type": "RSA", "public": 65537, "parameter": {"n": 245009}}}
+{"session": "265489c0f484", "time": "2026-11-05T11:58:10.215585+00:00", "direction": "Alice->Bob", "message": {"opcode": 2, "type": "RSA", "encrypted_key": [108677, 21944, 29284, 23023, 159070, 170422, 101195, 110612, 244350, 45100, 221151, 159070, 218484, 192342, 174733, 231747, 138274, 48619, 192131, 75702, 71652, 128976, 131057, 10373, 74157, 1, 128976, 112333, 195843, 188627, 208971, 172851]}}
+{"session": "265489c0f484", "time": "2026-11-05T11:58:10.225694+00:00", "direction": "Bob->Alice", "message": {"opcode": 2, "type": "AES", "encryption": "bPwy8pGra4FW1fd5pvSXAA=="}}
+{"session": "265489c0f484", "time": "2026-11-05T11:58:10.229734+00:00", "direction": "Alice->Bob", "message": {"opcode": 2, "type": "AES", "encryption": "6qTq5j8Pp+bEamggTVOusg=="}}

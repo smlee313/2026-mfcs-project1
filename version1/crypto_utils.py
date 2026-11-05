@@ -163,8 +163,9 @@ class JSONConnection:
     Uses newline as a send separator, but accepts messages without a newline
     so the included professor examples and their JSON wire format still work.
     """
-    def __init__(self, sock):
+    def __init__(self, sock, observer=None):
         self.sock = sock
+        self.observer = observer
         self.buffer = ''
         self.decoder = json.JSONDecoder()
 
@@ -172,6 +173,8 @@ class JSONConnection:
         payload = json.dumps(msg, separators=(',', ':'), ensure_ascii=True)
         self.sock.sendall((payload + '\n').encode('ascii'))
         print('Sent:', payload, flush=True)
+        if self.observer is not None:
+            self.observer('sent', msg)
 
     def recv(self):
         while True:
@@ -186,6 +189,8 @@ class JSONConnection:
                     if not isinstance(obj, dict):
                         raise ProtocolError('expected a JSON object')
                     print('Received:', json.dumps(obj), flush=True)
+                    if self.observer is not None:
+                        self.observer('received', obj)
                     return obj
             chunk = self.sock.recv(4096)
             if not chunk:

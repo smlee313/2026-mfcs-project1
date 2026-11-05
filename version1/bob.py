@@ -1,8 +1,10 @@
 """EL2001 Project 1: Bob (server), built from supplied threading skeleton."""
 import argparse
+import json
+import uuid
 import socket
-import secrets
 import threading
+from datetime import datetime, timezone
 from crypto_utils import (
     JSONConnection, ProtocolError, aes_decrypt, aes_encrypt, dh_aes_key,
     dh_keypair, expect, generate_rsa_keypair, is_generator, is_prime,
@@ -32,8 +34,7 @@ def protocol_three(peer, message, invalid='none'):
     p = random_prime()
     while p == 499 and invalid == 'prime':
         p = random_prime()
-    generators = [x for x in range(2, p) if is_generator(x, p)]
-    g = secrets.choice(generators)
+    g = next(x for x in range(2, p) if is_generator(x, p))
     if invalid == 'prime':
         p = 400  # deliberately composite, for Protocol IV-I test
     elif invalid == 'generator':
@@ -54,10 +55,33 @@ def protocol_three(peer, message, invalid='none'):
     print('Alice plaintext:', aes_decrypt(aes_key, response['encryption']))
 
 
-def handler(sock, message='hello', invalid='none'):
+_CAPTURE_LOCK = threading.Lock()
+
+def make_observer(path, session):
+    """Save only the JSON exchanged on Bob's normal connection.
+
+    Does not save Bob's secret key or the computed AES/shared key.
+    Bob always logs its own send/receive events; Alice is unchanged.
+    """
+    def observe(action, msg):
+        # Protocol I intentionally transmits private d: do not record that.
+        if msg.get('type') == 'RSAKey':
+            return
+        entry = {
+            'session': session,
+            'time': datetime.now(timezone.utc).isoformat(),
+            'direction': 'Alice->Bob' if action == 'received' else 'Bob->Alice',
+            'message': msg,
+        }
+        with _CAPTURE_LOCK:
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    return observe
+
+def handler(sock, message='hello', invalid='none', capture_path=None):
     with sock:
         sock.settimeout(10)
-        peer = JSONConnection(sock)
+        peer = JSONConnection(sock, observer=make_observer(capture_path, uuid.uuid4().hex[:12]) if capture_path else None)
         try:
             request = peer.recv()
             expect(request, 0)
@@ -74,7 +98,7 @@ def handler(sock, message='hello', invalid='none'):
             print('Bob handler error:', exc, flush=True)
 
 
-def run(addr, port, message='hello', invalid='none'):
+def run(addr, port, message='hello', invalid='none', capture_path=None):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as bob:
         bob.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         bob.bind((addr, port))
@@ -83,7 +107,7 @@ def run(addr, port, message='hello', invalid='none'):
         while True:
             conn, info = bob.accept()
             print(f'Bob accepted {info}', flush=True)
-            threading.Thread(target=handler, args=(conn, message, invalid), daemon=True).start()
+            threading.Thread(target=handler, args=(conn, message, invalid, capture_path), daemon=True).start()
 
 
 def main():
@@ -94,9 +118,10 @@ def main():
     parser.add_argument('--dh-invalid', choices=['none', 'prime', 'generator'], default='none',
                         help='For Protocol IV error-handling demo only')
     parser.add_argument('-l', '--log', default='INFO', help='Compatibility with starter code')
+    parser.add_argument('--capture', help='Save sent/received public wire JSON to a JSONL file for passive Eve demo')
     args = parser.parse_args()
     try:
-        run(args.addr, args.port, args.message, args.dh_invalid)
+        run(args.addr, args.port, args.message, args.dh_invalid, args.capture)
     except OSError as exc:
         parser.exit(1, f'Bob error: {exc}\n')
 

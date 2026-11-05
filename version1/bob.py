@@ -1,6 +1,7 @@
 """EL2001 Project 1: Bob (server), built from supplied threading skeleton."""
 import argparse
 import socket
+import secrets
 import threading
 from crypto_utils import (
     JSONConnection, ProtocolError, aes_decrypt, aes_encrypt, dh_aes_key,
@@ -31,7 +32,8 @@ def protocol_three(peer, message, invalid='none'):
     p = random_prime()
     while p == 499 and invalid == 'prime':
         p = random_prime()
-    g = next(x for x in range(2, p) if is_generator(x, p))
+    generators = [x for x in range(2, p) if is_generator(x, p)]
+    g = secrets.choice(generators)
     if invalid == 'prime':
         p = 400  # deliberately composite, for Protocol IV-I test
     elif invalid == 'generator':

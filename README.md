@@ -67,23 +67,7 @@ python -m unittest discover -s tests -v
 
 This tests both normal protocols and error scenarios locally.
 
-## Wire format & compatibility
 
-Messages follow slides 3–16, with `opcode`, `type`, `public`, `parameter`, `encrypted_key`, `encryption`, and `error` as appropriate. The TCP helper accepts complete JSON objects **with or without newline separators** and accounts for messages split across `recv()` calls. It sends each JSON object followed by a newline (valid JSON whitespace). This is a robust replacement for the example's single `recv(1024)` approach.
 
-RSA `public`/`private` are integer exponents, and `n` is derived from primes in protocol I. AES uses PKCS#7 padding, matching the supplied examples. DH secret is turned into a 2-byte big-endian value and repeated 16 times exactly as specified in slide 8.
 
-The slide-15 row for `public` mixes integer and Base64 wording; protocol diagrams and provided `.log` samples use integers, so this implementation uses integers. Confirm the intended public-key serialization with the instructor if their test app requires a different format.
-
-## Security note
-
-This is an educational implementation **only**. Small (~400–500) primes, raw textbook RSA, AES-ECB, and repeated DH shared secrets are insecure in real applications. Do not use it to protect actual secrets.
-
-## Suggested team division and GitHub evidence
-
-- Teammate A: Alice/client, input validation, RSA key verification, DH generator check.
-- Teammate B: Bob/server, RSA/DH key generation, AES operations.
-- Both: test, debug, review and document each other's features.
-
-Use separate named commits from both contributors, review changes together, and document your real work in this README. Replace these sample responsibilities with your actual division before submitting.
 

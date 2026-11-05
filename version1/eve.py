@@ -1,94 +1,70 @@
-"""Additional Task I: passive eavesdropper on Protocol II (RSA + AES).
+"""Additional Task I (offline): passive eavesdropper on a CAPTURED Protocol II log.
 
-Eve is a transparent relay. Alice connects to Eve (believing it is Bob); Eve
-forwards every JSON message to the real Bob unchanged and relays Bob's replies
-back. Eve never alters the conversation (passive), but copies the public
-messages and then breaks the scheme:
+The purest form of a passive attack: Eve never connects to anyone. She is only
+given the recorded messages that Alice and Bob exchanged (one JSON object per
+line, e.g. adv_protocol_two.log) and recovers the plaintext from them alone.
 
-    1. n = p*q with p, q in [400, 500], so n < 250000: factor it instantly.
-    2. phi = (p-1)(q-1); private key d = e^(-1) mod phi.
-    3. RSA-decrypt encrypted_key to rebuild the 32-byte AES key, then
-       AES-decrypt both captured messages.
+    python3 eve_offline.py adv_protocol_two.log
 
-Only works because the parameters are deliberately tiny (toy RSA). Real RSA
-uses a 2048-bit modulus that cannot be factored.
-
-Run order:
-    python3 bob.py   -p 6000 --message hello
-    python3 eve.py   --listen-port 5555 --bob-addr 127.0.0.1 --bob-port 6000
-    python3 alice.py -a 127.0.0.1 -p 5555 -t RSA --message world
+Why it works: n = p*q with p, q in [400, 500], so n < 250000 factors instantly,
+which hands Eve the RSA private key and then the AES key. Real RSA (2048-bit n)
+is immune.
 """
 import argparse
-import socket
-from crypto_utils import JSONConnection, aes_decrypt, prime_factors, rsa_decrypt_key
+import json
+from crypto_utils import prime_factors, rsa_decrypt_key, aes_decrypt
 
 
-def relay(src, dst):
-    """Forward one message from src to dst unchanged; return it for inspection."""
-    msg = src.recv()
-    dst.send(msg)
-    return msg
+def load_messages(path):
+    """Read a capture file of one JSON object per line."""
+    messages = []
+    with open(path, encoding="ascii") as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                messages.append(json.loads(line))
+    return messages
 
 
-def run(listen_addr, listen_port, bob_addr, bob_port):
-    # 1) Wait for Alice (she thinks Eve is Bob)
-    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind((listen_addr, listen_port))
-    srv.listen(1)
-    print(f'[Eve] waiting for Alice on {listen_addr}:{listen_port}', flush=True)
-    alice_sock, info = srv.accept()
-    print(f'[Eve] Alice connected from {info[0]}:{info[1]}', flush=True)
+def run(path):
+    messages = load_messages(path)
 
-    # 2) Connect to the real Bob
-    bob_sock = socket.create_connection((bob_addr, bob_port), timeout=10)
-    print(f'[Eve] connected to the real Bob at {bob_addr}:{bob_port}', flush=True)
+    e = n = None
+    encrypted_key = None
+    ciphertexts = []
+    for m in messages:
+        if m.get("type") == "RSA" and "parameter" in m and "n" in m["parameter"]:
+            e, n = int(m["public"]), int(m["parameter"]["n"])      # Bob's public key
+        elif m.get("type") == "RSA" and "encrypted_key" in m:
+            encrypted_key = m["encrypted_key"]                     # RSA-wrapped AES key
+        elif m.get("type") == "AES":
+            ciphertexts.append(m["encryption"])                    # AES messages
 
-    alice = JSONConnection(alice_sock)
-    bob = JSONConnection(bob_sock)
+    if e is None or encrypted_key is None:
+        raise SystemExit("capture is missing the RSA public key or the encrypted AES key")
 
-    # 3) Relay Protocol II, capturing the public material
-    relay(alice, bob)                                   # {opcode:0, type:RSA}
-    m = relay(bob, alice)                               # {opcode:1, public:e, parameter:{n}}
-    e, n = int(m['public']), int(m['parameter']['n'])
-    m = relay(alice, bob)                               # {opcode:2, encrypted_key:[...]}
-    encrypted_key = m['encrypted_key']
-    m = relay(bob, alice)                               # {opcode:2, type:AES, encryption}
-    bob_ct = m['encryption']
-    m = relay(alice, bob)                               # {opcode:2, type:AES, encryption}
-    alice_ct = m['encryption']
-
-    alice_sock.close()
-    bob_sock.close()
-
-    # 4) Break RSA: factor n -> phi -> d -> AES key
-    factors = sorted(prime_factors(n))
-    p = factors[0]
+    # Break RSA: factor n -> phi -> private key d -> AES key
+    p = sorted(prime_factors(n))[0]
     q = n // p
     phi = (p - 1) * (q - 1)
     d = pow(e, -1, phi)
     key = rsa_decrypt_key(encrypted_key, d, n)
 
-    print(f'[Eve] factored n={n} into p={p}, q={q}', flush=True)
-    print(f'[Eve] recovered private key d={d}', flush=True)
-    print(f'[Eve] recovered {len(key)}-byte AES key', flush=True)
-
-    # 5) Decrypt both captured messages
-    print('\n================ EVE: DECRYPTED TRAFFIC ================')
-    print(' Bob  -> Alice :', aes_decrypt(key, bob_ct))
-    print(' Alice -> Bob  :', aes_decrypt(key, alice_ct))
-    print('=======================================================')
+    print(f"[Eve] n={n} factored into p={p}, q={q}")
+    print(f"[Eve] recovered private key d={d}")
+    print(f"[Eve] recovered {len(key)}-byte AES key")
+    print("\n================ EVE: DECRYPTED TRAFFIC ================")
+    for i, ct in enumerate(ciphertexts, 1):
+        print(f" message {i}: {aes_decrypt(key, ct)}")
+    print("=======================================================")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='EL2001 Eve passive attacker (Protocol II)')
-    parser.add_argument('--listen-addr', default='0.0.0.0', help='where Eve listens for Alice')
-    parser.add_argument('--listen-port', type=int, required=True, help='Eve port (Alice connects here)')
-    parser.add_argument('--bob-addr', required=True, help='the real Bob address')
-    parser.add_argument('--bob-port', type=int, required=True, help='the real Bob port')
+    parser = argparse.ArgumentParser(description="Eve offline attacker (Protocol II capture)")
+    parser.add_argument("logfile", help="captured message log (one JSON object per line)")
     args = parser.parse_args()
-    run(args.listen_addr, args.listen_port, args.bob_addr, args.bob_port)
+    run(args.logfile)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

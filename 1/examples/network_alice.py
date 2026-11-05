@@ -7,29 +7,59 @@ def run(addr, port):
     conn.connect((addr, port))
     logging.info("Alice is connected to {}:{}".format(addr, port))
 
-    message = "Hello"
-    conn.send(message.encode("ascii"))
-    logging.info("[*] Sent: {}".format(message))
+    while True:
+        message = input("Alice > ")
 
-    msg = conn.recv(1024)
-    logging.info("[*] Received: {}".format(msg.decode("ascii")))
+        conn.send(message.encode("ascii"))
+        logging.info("[*] Sent: {}".format(message))
+
+        if message.lower() == "bye":
+            break
+
+        msg = conn.recv(1024)
+
+        if not msg:
+            print("Bob disconnected.")
+            break
+
+        print("Bob >", msg.decode("ascii"))
 
     conn.close()
 
+
 def command_line_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-a", "--addr", metavar="<bob's address>", help="Bob's address", type=str, required=True)
-    parser.add_argument("-p", "--port", metavar="<bob's port>", help="Bob's port", type=int, required=True)
-    parser.add_argument("-l", "--log", metavar="<log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)>", help="Log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)", type=str, default="INFO")
-    args = parser.parse_args()
-    return args
+    parser.add_argument(
+        "-a", "--addr",
+        metavar="<bob's address>",
+        help="Bob's address",
+        type=str,
+        required=True
+    )
+    parser.add_argument(
+        "-p", "--port",
+        metavar="<bob's port>",
+        help="Bob's port",
+        type=int,
+        required=True
+    )
+    parser.add_argument(
+        "-l", "--log",
+        metavar="<log level>",
+        type=str,
+        default="INFO"
+    )
+
+    return parser.parse_args()
+
 
 def main():
     args = command_line_args()
-    log_level = args.log
-    logging.basicConfig(level=log_level)
+
+    logging.basicConfig(level=args.log)
 
     run(args.addr, args.port)
-    
+
+
 if __name__ == "__main__":
     main()

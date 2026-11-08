@@ -8,7 +8,6 @@ from crypto_utils import (
     verify_rsa_keypair,
 )
 
-PORT_TO_TYPE = {5551: 'RSAKey', 5552: 'RSA', 5553: 'DH', 5554: 'DH'}
 def protocol_one(peer):
     peer.send({'opcode': 0, 'type': 'RSAKey'})
     response = expect(peer.recv(), 0, 'RSAKey')
@@ -79,6 +78,7 @@ def run(addr, port, protocol='RSA', message='world'):
         else:
             raise ProtocolError('unknown protocol')
 
+PORT_TO_TYPE = {5551: 'RSAKey', 5552: 'RSA', 5553: 'DH', 5554: 'DH'}
 
 def main():
     parser = argparse.ArgumentParser(description='EL2001 Alice client')
